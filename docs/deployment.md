@@ -26,9 +26,9 @@
 2. 保留既有指令碼屬性。確認 SHEET_ID 指向指定試算表；TURNSTILE_SECRET/LINE_TOKEN 等密鑰只放屬性。
 3. 執行 setupBookingSystem（可重跑），確認 BOOKING_META_COLUMN 對應 N 欄，提交紀錄表已存在。
 4. 執行 getHolidays，若失敗，在執行記錄查看問題列號；不要忽略錯誤。
-5. 更新 AKfycbxf… 那一個既有 Web App 部署為新版本，保留公開存取及執行帳號。勿只存檔未更新部署。
+5. 使用下方已驗證的新 Web App 部署，保留公開存取及執行帳號。後續程式更新須更新部署版本。
 6. GET 驗收 getSettings/getHolidays/getAvailability：設定為 3 小時、bot_required=true、週六正常可讀、週日不可預約。
-7. 確認 getAvailability 成功後，才合併前端 PR。index.html 已指向 AKfycbxf… 部署；若實際部署網址不同，合併前必須改成已驗證的網址。
+7. 確認 getAvailability 成功後，才合併前端 PR。index.html 已指向 AKfycbxlh… 新部署；若實際部署網址不同，合併前必須改成已驗證的網址。
 8. 驗證真實 Turnstile、寄信、LINE、日曆及取消 edit trigger。測試正式提交會寫入資料及通知，需事先安排明確測試資料與收件對象。
 
 本次不需更改試算表設定。sat_bookable_months 舊列不再被程式使用，保留作為歷史資料。
@@ -64,4 +64,10 @@ node tests/frontend.cjs
 
 已通過 18 項後端測試及瀏覽器流程檢查：週六、週日、單组容量、取消、待付款、跨日提前限制、20:00 公休區間、重複公休日合併、請求重送、付款衝突、灰色註記、選單、手機國碼、安全呈現、保證金提示、衝突後刷新、驗證到期、讀取失敗停止開放。
 
-尚未完成：正式 Apps Script 更新及重新部署、真實 Turnstile 提交、正式通知與日曆操作、線上 edit/daily/cleanup 觸發器。沒有宣稱線上修復已完成。
+2026-10-09 已驗證新部署設定、公休日及時段 GET 正常。尚未完成：真實 Turnstile 提交、正式通知與日曆操作、線上 edit/daily/cleanup 觸發器。沒有宣稱線上修復已完成。
+
+## 2026-10-09 新部署唯讀驗收
+
+新部署：https://script.google.com/macros/s/AKfycbxlhMzfsb2aS6ZOy5Fdlm2d5nmHugrOQoLSJ6YMApRIaatS0R1mGTYyWhxVeU6yAJi4jw/exec
+
+getSettings：buffer_hours=3、bot_required=true；getHolidays：41 個日期正常。10/10 週六開放，14:30、15:30 為已預約，17:30～19:30 為設定封鎖。10/11 週日所有時段封鎖，10/12 平日時段可讀；2027-01-01 正確拒絕超出預約範圍。前端已改為此網址。GET 成功不代表正式送出、真實驗證與通知已驗收。

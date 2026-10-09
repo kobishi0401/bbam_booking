@@ -1,0 +1,29 @@
+const {chromium}=require('playwright'),http=require('http'),fs=require('fs'),assert=require('assert/strict');
+(async()=>{
+  const server=http.createServer((req,res)=>{res.setHeader('Content-Type','text/html; charset=utf-8');res.end(fs.readFileSync('index.html'));});await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  let browser;let posts=[],mode='ok',botRequired=false;
+  try{
+    browser=await chromium.launch({headless:true,...(process.env.PLAYWRIGHT_CHANNEL?{channel:process.env.PLAYWRIGHT_CHANNEL}:{})});const page=await browser.newPage();
+    await page.clock.install({time:new Date('2026-10-09T08:00:00+08:00')});
+    await page.route('https://challenges.cloudflare.com/**',route=>route.fulfill({contentType:'application/javascript',body:"window.turnstile={render:function(s,opts){window.testBotOptions=opts;return 1;},reset:function(){}};"}));
+    await page.route('https://script.google.com/**',async route=>{
+      const url=new URL(route.request().url()),action=url.searchParams.get('action');let body;
+      if(mode==='fail')body={status:'error'};
+      else if(route.request().method()==='POST'){posts.push(JSON.parse(route.request().postData()));body=mode==='deposit'?{status:'warning',message:'deposit_required'}:mode==='conflict'?{status:'error',code:'SLOT_FULL'}:{status:'ok'};}
+      else if(action==='getSettings')body={status:'ok',settings:{buffer_hours:'3',bot_required:botRequired,turnstile_site_key:'test-key'}};
+      else if(action==='getHolidays')body={status:'ok',holidays:{'2026-10-10':{type:'partial',msg:'預約已滿',slots:['17:30']}}};
+      else body={status:'ok',date:url.searchParams.get('date'),slots:['14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00','18:30','19:00','19:30'].map(slot=>({slot,state:slot==='14:00'?'full':slot==='17:30'?'blocked':'available'}))};
+      await route.fulfill({json:body,headers:{'Access-Control-Allow-Origin':'*'}});
+    });
+    const url='http://127.0.0.1:'+server.address().port;
+    async function select(){await page.goto(url);await page.locator('#calCard').waitFor({state:'visible'});await page.locator('.cal-cell.weekday').filter({hasText:/^10$/}).click();await page.locator('button.time-chip').first().waitFor();}
+    async function form(){await page.locator('button[data-slot="16:30"]').click();await page.locator('#fName').fill('<Test>');await page.locator('#fPhone').fill('+886 912345678');await page.locator('#fEmail').fill('test@example.com');await page.locator('#fCount').selectOption('5');await page.locator('#policyCheck').check();}
+    await select();assert.equal(await page.locator('button.time-chip').count(),12);assert.equal(await page.locator('button[data-slot="14:00"]').isDisabled(),true);assert.match(await page.locator('button[data-slot="14:00"]').textContent(),/已預約/);assert.match(await page.locator('button[data-slot="17:30"]').textContent(),/不開放/);assert.equal(await page.locator('#specialToast').isVisible(),false);assert.doesNotMatch(await page.locator('body').innerText(),/免預約/);
+    await form();await page.locator('#submitBtn').click();await page.locator('#successOverlay').waitFor({state:'visible'});assert.equal(posts[0].count,5);assert.equal(posts[0].phone,'0912345678');assert.match(posts[0].requestId,/^[A-Za-z0-9_-]{16,80}$/);assert.match(await page.locator('#successDetail').textContent(),/<Test>/);assert.equal(await page.locator('#successDetail Test').count(),0);assert.equal(await page.locator('#fCount option').count(),6);
+    mode='deposit';await select();await form();await page.locator('#submitBtn').click();await page.locator('#warningOverlay').waitFor({state:'visible'});assert.match(await page.locator('#warningOverlay').innerText(),/不保留時段/);
+    mode='conflict';await select();await form();await page.locator('#submitBtn').click();await page.locator('#formSection').waitFor({state:'hidden'});assert.equal(await page.locator('#successOverlay').isVisible(),false);assert.equal(await page.evaluate(()=>selectedSlot),null);
+    mode='ok';botRequired=true;await select();await form();assert.equal(await page.locator('#submitBtn').isDisabled(),true);await page.waitForFunction(()=>window.testBotOptions);await page.evaluate(()=>testBotOptions.callback('fake-local-token'));assert.equal(await page.locator('#submitBtn').isDisabled(),false);await page.evaluate(()=>testBotOptions['expired-callback']());assert.equal(await page.locator('#submitBtn').isDisabled(),true);
+    mode='fail';await page.goto(url);await page.waitForFunction(()=>document.getElementById('loadingMsg').textContent.includes('暫時無法'));assert.equal(await page.locator('#calCard').isVisible(),false);
+    console.log('19 browser assertions passed (mock APIs, no real bookings or notifications)');
+  }finally{if(browser)await browser.close();server.close();}
+})().catch(err=>{console.error(err);process.exitCode=1;});

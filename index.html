@@ -44,8 +44,6 @@ body{font-family:'Noto Sans TC',sans-serif;background:#f0f5ff;color:#2c4a6e;min-
 .cal-note{display:flex;gap:.75rem;margin-top:.75rem;flex-wrap:wrap}
 .note-item{display:flex;align-items:center;gap:5px;font-size:clamp(10px,2.8vw,11px);color:var(--sub)}
 .note-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.toast{display:none;padding:.7rem 1.25rem;border-radius:10px;font-size:clamp(11px,3.2vw,13px);line-height:1.65;margin:0 .75rem .5rem}
-.toast.closed{background:var(--err-bg);border:.5px solid var(--err-bd);color:var(--err-tx)}
 .time-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 @media(min-width:420px){.time-grid{grid-template-columns:repeat(4,1fr)}}
 .time-chip{padding:clamp(10px,3vw,12px) 4px;text-align:center;font-size:clamp(12px,3.5vw,13px);border:.5px solid var(--chip-bd);border-radius:10px;cursor:pointer;background:var(--chip);color:var(--text);transition:background .12s,transform .1s;line-height:1.35;touch-action:manipulation;-webkit-user-select:none;user-select:none}
@@ -124,7 +122,6 @@ body{font-family:'Noto Sans TC',sans-serif;background:#f0f5ff;color:#2c4a6e;min-
       <div class="note-item"><div class="note-dot" style="background:#fff0f0;border:1px solid #f5c8c8"></div>公休</div>
     </div>
   </div>
-  <div id="specialToast" class="toast closed"><span id="specialMsg"></span></div>
   <div class="card" id="slotSection" style="display:none">
     <p class="sec-label">選擇時段</p>
     <div class="time-grid" id="timeGrid"></div>
@@ -211,7 +208,7 @@ function pad(n){return String(n).padStart(2,'0');}
 function dateKey(d){return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());}
 function isAtMin(){return viewYear===MIN_YEAR&&viewMonth===MIN_MONTH;}
 function isAtMax(){return viewYear===MAX_YEAR&&viewMonth===MAX_MONTH;}
-function clearToasts(){ge('specialToast').style.display='none';}
+
 function showErr(msg){ge('errMsg').textContent=msg;ge('errMsg').style.display=msg?'block':'none';}
 function request(url,options){var controller=new AbortController(),timer=setTimeout(function(){controller.abort();},30000);return fetch(url,Object.assign({},options||{},{signal:controller.signal})).then(function(r){if(!r.ok)throw new Error('HTTP');return r.json();}).finally(function(){clearTimeout(timer);});}
 function readAPI(action){return request(API_URL+'?action='+action).then(function(r){if(r.status!=='ok')throw new Error(r.message||'讀取失敗');return r;});}
@@ -241,16 +238,16 @@ function renderCalendar(){
     var date=new Date(viewYear,viewMonth,d),key=dateKey(date),special=SPECIAL_DAYS[key],cell=document.createElement('div');cell.textContent=d;cell.className='cal-cell';
     if(date<today){cell.classList.add('past');}
     else if(date.getDay()===0){cell.classList.add('sunday');}
-    else if(special&&special.type==='closed'&&!/預約已滿/.test(special.msg)){
-      cell.classList.add('special-closed');(function(sp){cell.addEventListener('click',function(){slotLoad++;selectedDate=null;selectedSlot=null;clearToasts();renderCalendar();ge('specialMsg').textContent=sp.msg;ge('specialToast').style.display='flex';ge('slotSection').style.display='none';ge('formSection').style.display='none';updateSubmit();});})(special);
+    else if(special&&special.type==='closed'){
+      cell.classList.add('special-closed');(function(sp){cell.addEventListener('click',function(){slotLoad++;selectedDate=null;selectedSlot=null;renderCalendar();ge('slotSection').style.display='none';ge('formSection').style.display='none';updateSubmit();});})(special);
     }else{cell.classList.add('weekday');if(selectedDate&&dateKey(selectedDate)===key)cell.classList.add('selected');(function(dt){cell.addEventListener('click',function(){selectDate(dt);});})(date);}
     grid.appendChild(cell);
   }
 }
-function selectDate(date){if(submitting)return;selectedDate=date;selectedSlot=null;pendingRequest=null;clearToasts();renderCalendar();renderSlots(date);}
+function selectDate(date){if(submitting)return;selectedDate=date;selectedSlot=null;pendingRequest=null;renderCalendar();renderSlots(date);}
 function renderSlots(date){
   var load=++slotLoad,key=dateKey(date);selectedSlot=null;slotStates={};updateSubmit();ge('slotSection').style.display='block';ge('formSection').style.display='none';ge('timeGrid').textContent='讀取時段中…';
-  clearToasts();var special=SPECIAL_DAYS[key];if(special&&special.type==='partial'&&!/預約已滿/.test(special.msg)){ge('specialMsg').textContent=special.msg+'，部分時段不開放';ge('specialToast').style.display='flex';}
+
   return loadMonth(monthKey(date)).then(function(data){
     if(load!==slotLoad||!selectedDate||dateKey(selectedDate)!==key)return;
     applyMonth(data);var r={date:key,slots:data.days[key]};
@@ -265,7 +262,7 @@ function renderSlots(date){
   }).catch(function(){if(load!==slotLoad)return;slotStates={};ge('timeGrid').textContent='時段暫時無法載入，請重新選擇日期。';});
 }
 function selectSlot(slot){if(submitting||slotStates[slot]!=='available')return;if(!isSlotAvailableByTime(selectedDate,slot)){renderSlots(selectedDate);return;}selectedSlot=slot;pendingRequest=null;ge('timeGrid').querySelectorAll('.time-chip').forEach(function(c){c.classList.toggle('selected',c.dataset.slot===slot);});ge('formSection').style.display='block';showErr('');updateSubmit();ge('formSection').scrollIntoView({behavior:'smooth',block:'start'});}
-function changeMonth(delta){if(submitting||(delta<0&&isAtMin())||(delta>0&&isAtMax()))return;var date=new Date(viewYear,viewMonth+delta,1);viewYear=date.getFullYear();viewMonth=date.getMonth();slotLoad++;selectedDate=null;selectedSlot=null;pendingRequest=null;clearToasts();ge('slotSection').style.display='none';ge('formSection').style.display='none';updateSubmit();renderCalendar();var key=monthKey(date);loadMonth(key).then(function(data){if(viewYear===date.getFullYear()&&viewMonth===date.getMonth()){applyMonth(data);renderCalendar();}}).catch(function(){});}
+function changeMonth(delta){if(submitting||(delta<0&&isAtMin())||(delta>0&&isAtMax()))return;var date=new Date(viewYear,viewMonth+delta,1);viewYear=date.getFullYear();viewMonth=date.getMonth();slotLoad++;selectedDate=null;selectedSlot=null;pendingRequest=null;ge('slotSection').style.display='none';ge('formSection').style.display='none';updateSubmit();renderCalendar();var key=monthKey(date);loadMonth(key).then(function(data){if(viewYear===date.getFullYear()&&viewMonth===date.getMonth()){applyMonth(data);renderCalendar();}}).catch(function(){});}
 ge('prevBtn').addEventListener('click',function(){changeMonth(-1);});ge('nextBtn').addEventListener('click',function(){changeMonth(1);});
 ge('policyCheck').addEventListener('change',updateSubmit);
 ge('submitBtn').addEventListener('click',function(){
@@ -294,7 +291,7 @@ ge('submitBtn').addEventListener('click',function(){
     else showErr(result.message||'送出失敗，請稍後再試');
   }).catch(function(){showErr('尚無法確認提交結果，請保留原資料重試或聯繫客服。');}).finally(function(){submitting=false;ge('loadingOverlay').style.display='none';resetBot();updateSubmit();});
 });
-function resetForm(){slotLoad++;selectedDate=null;selectedSlot=null;pendingRequest=null;ge('slotSection').style.display='none';ge('formSection').style.display='none';['fName','fPhone','fEmail','fCount'].forEach(function(id){ge(id).value='';});ge('policyCheck').checked=false;showErr('');clearToasts();resetBot();renderCalendar();window.scrollTo({top:0,behavior:'smooth'});}
+function resetForm(){slotLoad++;selectedDate=null;selectedSlot=null;pendingRequest=null;ge('slotSection').style.display='none';ge('formSection').style.display='none';['fName','fPhone','fEmail','fCount'].forEach(function(id){ge(id).value='';});ge('policyCheck').checked=false;showErr('');resetBot();renderCalendar();window.scrollTo({top:0,behavior:'smooth'});}
 ge('backBtn').addEventListener('click',function(){ge('successOverlay').style.display='none';resetForm();});
 ge('warningBackBtn').addEventListener('click',function(){ge('warningOverlay').style.display='none';resetForm();});
 var loadingMsgs=['載入預約系統中，請稍候⋯','正在讀取預約資訊⋯','謝謝您的耐心等待'],msgIndex=0,msgTimer=setInterval(function(){msgIndex=(msgIndex+1)%loadingMsgs.length;ge('loadingMsg').textContent=loadingMsgs[msgIndex];},3000);

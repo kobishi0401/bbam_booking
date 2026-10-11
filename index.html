@@ -186,7 +186,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:#f0f5ff;color:#2c4a6e;min-
   <button class="success-back" id="backBtn">返回重新預約</button>
 </div>
 <script>
-var API_URL='https://script.google.com/macros/s/AKfycbxlhMzfsb2aS6ZOy5Fdlm2d5nmHugrOQoLSJ6YMApRIaatS0R1mGTYyWhxVeU6yAJi4jw/exec';
+var API_URL='https://script.google.com/macros/s/AKfycbxxSf_f5URGHxenJ7SnRkGmjGrPsv0Xl-_P93yfvG-5QEpnAtR6or8Lns-zf8z6vPJYHQ/exec';
 var SLOTS=['14:00','14:30','15:00','15:30','16:00','16:30','17:00','17:30','18:00','18:30','19:00','19:30'];
 var SPECIAL_DAYS={},SETTINGS={},BUFFER_HOURS=2;
 function taipeiNow(){var p=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());var v={};p.forEach(function(x){v[x.type]=x.value;});return new Date(Number(v.year),Number(v.month)-1,Number(v.day));}

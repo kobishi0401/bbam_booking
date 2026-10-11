@@ -117,8 +117,8 @@ function bufferHours(settings) {
   var n=Number(settings.buffer_hours);
   return settings.buffer_hours!==undefined && Number.isFinite(n) && n>=0 && n<=168 ? n : 2;
 }
-function getSettings() {
-  var s=readSettings();
+function getSettings(settings) {
+  var s=settings||readSettings();
   return {buffer_hours:String(bufferHours(s)),turnstile_site_key:s.turnstile_site_key||'',bot_required:PROPS.getProperty('ALLOW_UNPROTECTED_TEST_ONLY')!=='true'};
 }
 function getHolidays() {
@@ -148,7 +148,7 @@ function getHolidays() {
 }
 function occupiesSlot(status) { return ['取消','待付款','待付保證金','未付款'].indexOf(String(status).trim())<0; }
 function countLabel(count) { return Number(count)===5 ? '5 人以上' : count+' 人'; }
-function availability(date,rows,holidays,settings,now) {
+function availability(date,rows,holidays,settings,now,occupied) {
   if (!inWindow(date,now)) throw new Error('INVALID_DATE');
   var holiday=holidays[date], sunday=new Date(date+'T00:00:00+08:00').getUTCDay()===6;
   // Sunday in Taipei is Saturday 16:00 UTC.
@@ -156,13 +156,28 @@ function availability(date,rows,holidays,settings,now) {
     var state='available';
     if (startTime(date,slot)<now.getTime()+bufferHours(settings)*3600000) state='past';
     else if (sunday || (holiday && (holiday.type==='closed' || holiday.slots.indexOf(slot)>=0))) state='blocked';
-    else if (rows.slice(1).some(function(row) {return occupiesSlot(row[7]) && dayString(row[4])===date && slotString(row[5])===slot;})) state='full';
+    else if (occupied ? occupied[date+'|'+slot] : rows.slice(1).some(function(row) {return occupiesSlot(row[7]) && dayString(row[4])===date && slotString(row[5])===slot;})) state='full';
     return {slot:slot,state:state};
   });
+}
+function monthAvailability(month,now) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('INVALID_MONTH');
+  var today=dayString(now),year=Number(month.slice(0,4)),number=Number(month.slice(5)),end=new Date(Date.UTC(year,number,0)).getUTCDate();
+  if (!inWindow(month+'-'+('0'+end).slice(-2),now) && !inWindow(month+'-01',now)) throw new Error('INVALID_MONTH');
+  var sheet=bookingSheet(),last=sheet.getLastRow(),occupied={};
+  // Read only date, slot, count, status once. Never return customer records.
+  if(last>1) sheet.getRange(2,5,last-1,4).getValues().forEach(function(row){var date=dayString(row[0]);if(date.slice(0,7)===month&&occupiesSlot(row[3]))occupied[date+'|'+slotString(row[1])]=true;});
+  var holidays=getHolidays(),settings=readSettings(),days={};
+  for(var day=1;day<=end;day++){var date=month+'-'+('0'+day).slice(-2);if(date>=today&&inWindow(date,now))days[date]=availability(date,[],holidays,settings,now,occupied);}
+  return {status:'ok',month:month,days:days,holidays:holidays,settings:getSettings(settings),generatedAt:now.toISOString()};
 }
 function doGet(e) {
   try {
     var p=e.parameter||{};
+    if (p.action==='getMonthAvailability') {
+      try {return corsOutput(monthAvailability(String(p.month||''),new Date()));}
+      catch(err){if(err.message==='INVALID_MONTH')return corsOutput(failure('INVALID_INPUT','月份不在可預約範圍'));throw err;}
+    }
     if (p.action==='getHolidays') return corsOutput({status:'ok',holidays:getHolidays()});
     if (p.action==='getSettings') return corsOutput({status:'ok',settings:getSettings()});
     if (p.action==='getAvailability') {
